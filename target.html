@@ -1,0 +1,29 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Telecom Sales — Target Planner</title><link rel="stylesheet" href="style.css"></head>
+<body><div class="wrap"><div id="shell"></div><div id="page"></div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="core.js"></script><script src="snapshot.js"></script><script src="shared.js"></script>
+<script>
+const Page = { file: 'target.html', title: 'Target Planner', ch: true,
+extra: '<label>Adjust target/stretch by <input type="number" id="adj" value="0" step="1" style="width:70px"> %</label>',
+rows() { const f = Shell.f(), a = 1 + (+$('adj').value || 0) / 100, out = [];
+  const one = (name, w) => { const fc = Core.forecast(Data.norm(w)); if (!fc) return null; const t = Math.round(fc.target * a), s = Math.round(fc.stretch * a); return { name, w, last: fc.last, trend: fc.trend, min: fc.min, t, s, mm: fc.min * 4, mt: t * 4, ms: s * 4 }; };
+  for (const s of Data.stores) { const r = one(s.id + (s.dupOf ? ' ⚠' : ''), Data.series(s.id, f.ch, false)); if (r) out.push(r); }
+  const all = one('All stores' + (f.dedupe ? ' (identical tabs once)' : ''), Data.series('all', f.ch, f.dedupe)); if (all) out.push(all); return out; },
+render() {
+  const f = Shell.f(), R = this.rows(), sel = R.find(r => r.name.startsWith(f.store === 'all' ? 'All stores' : f.store)) || R[R.length - 1];
+  if (!sel) { $('page').innerHTML = '<div class="card empty">Not enough complete weeks (need at least 3).</div>'; return; }
+  const done = sel.w.filter(x => x.complete), nx = done[done.length - 1].e + Core.DAY, lab = Core.iso(nx).slice(5) + ' → ' + Core.iso(nx + 6 * Core.DAY).slice(5);
+  $('page').innerHTML = `<div class="kpis">${U.kpi('Minimum / week', U.n(sel.min) + ' pcs', 'floor — typical weak week')}${U.kpi('Target / week', U.n(sel.t) + ' pcs', 'next week ' + lab)}${U.kpi('Stretch / week', U.n(sel.s) + ' pcs', 'push goal')}${U.kpi('Target next 4 weeks', U.n(sel.mt) + ' pcs', 'min ' + U.n(sel.mm) + ' · stretch ' + U.n(sel.ms))}</div>
+  <div class="card"><h3>${sel.name} — history and next-week targets</h3><div class="ch"><canvas id="c1"></canvas></div></div>
+  <div class="card sc" style="margin-top:10px"><h3>Target table (pcs)</h3><table><tr><th>Store</th><th>Last week</th><th>Trend 4w vs 4w</th><th>Min/wk</th><th>Target/wk</th><th>Stretch/wk</th><th>Min 4w</th><th>Target 4w</th><th>Stretch 4w</th></tr>
+  ${R.map(r => `<tr><td>${r.name}</td><td>${U.n(r.last)}</td><td>${U.pc(r.trend)}</td><td>${U.n(r.min)}</td><td><b>${U.n(r.t)}</b></td><td>${U.n(r.s)}</td><td>${U.n(r.mm)}</td><td><b>${U.n(r.mt)}</b></td><td>${U.n(r.ms)}</td></tr>`).join('')}</table>
+  <div class="note"><b>How it is calculated</b> (full weeks only, each normalised to 7 days): <b>Target</b> = weighted average of the last 4 weeks (newest weighs most). <b>Minimum</b> = 25th percentile of the last 8 weeks (never above target). <b>Stretch</b> = the higher of the 75th percentile of the last 8 weeks and target +10%. "4w" = 4 × weekly. This is a statistical baseline, not a guarantee: adjust it with the % box for promos, holidays or the App/POS shift.</div></div>`;
+  const L = done.map(U.lbl).concat(['Next wk']), pad = a => a.concat([null]), h = done.map(x => Math.round(x.n7)), n = h.length;
+  const pt = (v, c, l) => ({ label: l, data: Array(n).fill(null).concat([v]), type: 'line', borderColor: c, backgroundColor: c, pointRadius: 7, showLine: false });
+  Shell.chart('c1', { type: 'bar', data: { labels: L, datasets: [{ label: 'Actual (pcs per 7 days)', data: pad(h), backgroundColor: '#2a6df4' }, pt(sel.min, '#d64545', 'Minimum'), pt(sel.t, '#16a06b', 'Target'), pt(sel.s, '#e0902b', 'Stretch')] }, options: { scales: { y: { beginAtZero: true } } } });
+},
+exportData() { const R = this.rows(); if (!R.length) return null; return { name: 'sales_targets', sheets: [{ name: 'Targets', rows: [['Store', 'Last week', 'Trend 4w vs prior 4w %', 'Min/week', 'Target/week', 'Stretch/week', 'Min 4 weeks', 'Target 4 weeks', 'Stretch 4 weeks'], ...R.map(r => [r.name, r.last, r.trend == null ? '' : +(r.trend * 100).toFixed(1), r.min, r.t, r.s, r.mm, r.mt, r.ms])] },
+  { name: 'Weekly history', rows: [['Store', 'Week start', 'Week end', 'Pcs', 'Complete'], ...R.flatMap(r => r.w.map(x => [r.name, Core.iso(x.s), Core.iso(x.e), x.pcs, x.complete ? 'yes' : 'no']))] }] }; } };
+Shell.start(Page);
+</script></body></html>

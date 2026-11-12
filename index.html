@@ -1,0 +1,31 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Telecom Sales — Weekly Sales</title><link rel="stylesheet" href="style.css"></head>
+<body><div class="wrap"><div id="shell"></div><div id="page"></div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="core.js"></script><script src="snapshot.js"></script><script src="shared.js"></script>
+<script>
+const Page = { file: 'index.html', title: 'Weekly Sales', ch: true,
+render() {
+  const f = Shell.f(), w = Data.series(f.store, f.ch, f.dedupe), done = w.filter(x => x.complete);
+  const last = done[done.length - 1], prev = done[done.length - 2], l4 = done.slice(-4);
+  const avg4 = l4.length ? l4.reduce((a, x) => a + x.n7, 0) / l4.length : 0, tot = w.reduce((a, x) => a + x.pcs, 0);
+  const stack = f.ch === 'all' && Data.hasApp, keys = [...new Set(w.flatMap(x => Object.keys(x.carrier)))];
+  const all = [...new Set(Data.stores.flatMap(s => ['pos', 'app'].flatMap(c => s[c] ? [...s[c].keys()] : [])))].sort((a, b) => a - b);
+  const pal = ['#2a6df4', '#16a06b', '#e0902b', '#d64545', '#8a5cf5', '#18a5b8'];
+  $('page').innerHTML = `<div class="kpis">${U.kpi('Last full week (' + (last ? Core.iso(last.s).slice(5) + ' → ' + Core.iso(last.e).slice(5) : '–') + ')', last ? U.n(last.pcs) + ' pcs' : '–', prev ? 'vs previous week ' + U.pc(last.n7 / prev.n7 - 1) : '')}
+    ${U.kpi('Avg last 4 full weeks', U.n(avg4) + ' pcs/wk', 'normalised to 7 days')}${U.kpi('Total in data', U.n(tot) + ' pcs', w.length + ' weeks')}</div>
+    <div class="grid"><div class="card"><h3>Pcs sold per week</h3><div class="ch"><canvas id="c1"></canvas></div></div>
+    <div class="card"><h3>Store comparison (pcs per week)</h3><div class="ch"><canvas id="c2"></canvas></div></div></div>
+    <div class="grid"><div class="card"><h3>By carrier</h3><div class="ch"><canvas id="c3"></canvas></div></div>
+    <div class="card sc"><h3>Weekly table</h3><table><tr><th>Week</th><th>Days</th><th>Pcs</th><th>Pcs/day</th><th>Revenue (NT$)</th><th>WoW</th></tr>
+    ${w.map((x, i) => `<tr><td>${Core.iso(x.s)} → ${Core.iso(x.e)}${x.complete ? '' : ' †'}</td><td>${x.days}</td><td>${U.n(x.pcs)}</td><td>${(x.pcs / x.days).toFixed(1)}</td><td>${U.n(x.amt)}</td><td>${i ? U.pc(x.n7 / w[i - 1].n7 - 1) : '–'}</td></tr>`).join('')}</table>
+    <div class="note">${U.foot}</div></div></div>`;
+  const labels = w.map(U.lbl);
+  Shell.chart('c1', { type: 'bar', data: { labels, datasets: stack ? [{ label: 'POS', data: w.map(x => x.pos), backgroundColor: pal[0] }, { label: 'App', data: w.map(x => x.app), backgroundColor: pal[1] }] : [{ label: 'Pcs', data: w.map(x => x.pcs), backgroundColor: pal[0] }] }, options: { scales: { x: { stacked: stack }, y: { stacked: stack, beginAtZero: true } } } });
+  Shell.chart('c2', { type: 'line', data: { labels: all.map(k => Core.iso(k).slice(5)), datasets: Data.stores.map((s, i) => { const m = new Map(Data.series(s.id, f.ch, false).map(x => [x.s, x.pcs]));
+    return { label: s.id + (s.dupOf ? ' (=' + s.dupOf + ')' : ''), data: all.map(k => m.get(k) ?? null), borderColor: pal[i % 6], borderDash: s.dupOf ? [5, 4] : [], tension: .25, pointRadius: 2 }; }) } });
+  Shell.chart('c3', { type: 'bar', data: { labels, datasets: keys.map((k, i) => ({ label: k, data: w.map(x => x.carrier[k] || 0), backgroundColor: pal[i % 6] })) }, options: { scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } } } });
+},
+exportData() { const f = Shell.f(), w = Data.series(f.store, f.ch, f.dedupe); return { name: 'weekly_sales_' + f.store.replace(/\W+/g, '_'), sheets: [{ name: 'Weekly', rows: [['Week start', 'Week end', 'Days', 'Pcs', 'POS pcs', 'App pcs', 'Pcs per 7 days', 'Revenue', 'Complete week'], ...w.map(x => [Core.iso(x.s), Core.iso(x.e), x.days, x.pcs, x.pos, x.app, +x.n7.toFixed(1), x.amt, x.complete ? 'yes' : 'no'])] }] }; } };
+Shell.start(Page);
+</script></body></html>
